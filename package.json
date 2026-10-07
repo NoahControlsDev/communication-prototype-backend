@@ -1,0 +1,26 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend API for the BuildingBAS.ca communication prototype",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env src/server.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "migrate:up": "node --env-file-if-exists=.env scripts/migrate.js up",
+    "migrate:down": "node --env-file-if-exists=.env scripts/migrate.js down",
+    "migrate:create": "node-pg-migrate create --migrations-dir migrations --migration-file-language sql",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "fake-gateway": "node --env-file-if-exists=.env scripts/fake-gateway.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "mqtt": "^5.16.0",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.0"
+  }
+}

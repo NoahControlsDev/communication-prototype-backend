@@ -1,0 +1,213 @@
+[
+    {
+        "id": "33acdda2eaf2a91b",
+        "type": "tab",
+        "label": "Gateway",
+        "disabled": false,
+        "info": "Publishes this gateway's retained status (online / Last Will offline), its retained birth certificate, then data, for the BuildingBAS backend.",
+        "env": [
+            {
+                "name": "GATEWAY_ID",
+                "value": "GW-PRU301",
+                "type": "str"
+            },
+            {
+                "name": "SKIP_ROOT",
+                "value": "Absolute",
+                "type": "str"
+            }
+        ]
+    },
+    {
+        "id": "3faa448502f711e4",
+        "type": "comment",
+        "z": "33acdda2eaf2a91b",
+        "name": "Set GATEWAY_ID (and SKIP_ROOT) in this tab's env. In \"Build status + birth\": TYPES maps devices to profiles (known type = instant accept), RULES describes points.",
+        "info": "Topics\n- bas/<GATEWAY_ID>/status  retained  {\"status\":\"online\"} on connect, {\"status\":\"offline\"} as Last Will / on close\n- bas/<GATEWAY_ID>/birth   retained  { gateway, timestamp, devices: [{ device_key, name, type, properties: [{ key, type, unit, acquisition, deadband, min, max, writable }] }] }\n- bas/<GATEWAY_ID>/data    not retained  { timestamp, devices: { \"<device_key>\": { \"<key>\": value } } }\n\nBoth functions walk the snapshot the same way (SKIP_ROOT from the tab env), so data device keys match the birth.",
+        "x": 360,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "09e05413d5f683cb",
+        "type": "inject",
+        "z": "33acdda2eaf2a91b",
+        "name": "Point list (sample snapshot)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.5,
+        "topic": "",
+        "payload": "{   \"timestamp\": \"2026-09-30T16:22:43Z\",   \"Absolute\": {     \"Prudential301\": {       \"DHW\": {         \"Boiler2\": {           \"LeavingWaterTemp\": 74.9,           \"Output\": 0,           \"Alarm\": 0,           \"Command\": 0,           \"PumpStatus\": 0,           \"OutState\": 1,           \"Enable\": 1,           \"Status\": 0         },         \"Boiler1\": {           \"LeavingWaterTemp\": 83.3,           \"Output\": 0,           \"Alarm\": 0,           \"Command\": 0,           \"PumpStatus\": 1,           \"OutState\": 1,           \"Enable\": 2,           \"Status\": 0         },         \"General\": {           \"Rotate\": 0,           \"LeadBoiler\": 2,           \"TankTemp\": 74.4,           \"SupplyTemp\": 58,           \"TuningReset\": 0,           \"BoilerRunning\": 1,           \"BoilerRotateState\": 1,           \"BoilerStageSP\": 95,           \"PIDState\": 3,           \"TempSP\": 64,           \"PumpDownTime\": 120,           \"SystemEnable\": 1,           \"HotWaterAvailable\": 1         }       },       \"DualTemp\": {         \"Condenser\": {           \"CoilWaterSupplyTemp\": 26.3,           \"ChilledWaterSupplyTemp\": 25.3,           \"CoilWaterReturnTemp\": 25.9,           \"WaterReturnTemp\": 12.7,           \"ChilledWaterReturnTemp\": 25.4,           \"HotWaterSupplyTemp\": 532.9,           \"HotWaterReturnTemp\": 26.2         },         \"Tower1\": {           \"Command\": 0,           \"Status\": 1,           \"Output\": 0,           \"OutputFreq\": 0         },         \"Chiller1\": {           \"SP\": 0,           \"Enable\": 1,           \"Status\": 0         },         \"Boiler1\": {           \"EnterWaterTemp\": 25.9,           \"LeaveWaterTemp\": 33.7,           \"Output\": 0,           \"Alarm\": 0,           \"PumpStatus\": 0,           \"Status\": 0,           \"Command\": 0,           \"Enable\": 2,           \"OutState\": 1         },         \"Boiler2\": {           \"EnterWaterTemp\": 25.6,           \"LeaveWaterTemp\": 25.2,           \"Output\": 0,           \"Alarm\": 0,           \"PumpStatus\": 0,           \"Status\": 0,           \"Command\": 0,           \"Enable\": 2,           \"OutState\": 1         },         \"Zone1\": {           \"PumpRotateState\": 1,           \"PumpBOutState\": 2,           \"PumpAOutState\": 2,           \"PumpRunning\": 2         },         \"Zone2\": {           \"PumpRotateState\": 1,           \"PumpBOutState\": 2,           \"PumpAOutState\": 2,           \"PumpRunning\": 2         },         \"ChilledWaterPump1\": {           \"Command\": 1,           \"Status\": 1         },         \"MiscHeatingPump1\": {           \"Status\": 0,           \"Command\": 0         },         \"CondenserWaterPump1\": {           \"Status\": 1,           \"Command\": 1         },         \"DualTemp1\": {           \"PumpStatus\": 1,           \"Alarm\": 1,           \"PumpCommand\": 1         },         \"DualTemp2\": {           \"PumpStatus\": 1,           \"Alarm\": 1,           \"PumpCommand\": 1         },         \"HeatPump1\": {           \"Status\": 1,           \"Alarm\": 1,           \"Command\": 1         },         \"HeatPump2\": {           \"Status\": 1,           \"Alarm\": 1,           \"Command\": 1         },         \"General\": {           \"OutdoorAirTemp\": 15.9,           \"HotWaterOutsideAirResetB\": 15,           \"HotWaterOutsideAirResetA\": 0,           \"HeatEnableOutSP\": 20,           \"CoolEnableOutSP\": 7,           \"HotWaterLowSP\": 60,           \"HotWaterHighSP\": 50,           \"CoolEnableDualTemp\": 32,           \"ColdWaterSP\": 26,           \"BoilerRunning\": 0,           \"HotWaterSP\": 50,           \"PumpDownTime\": 180,           \"BoilerStageSP\": 95,           \"Bypass\": 0,           \"BoilerRotate\": 0,           \"HotWaterAvailable\": 0,           \"TuningReset\": 0,           \"PumpRotation\": 0,           \"CoolHeatMode\": 0,           \"LeadBoiler\": 1,           \"LeadHeatPump\": 2,           \"LeadDualPump\": 2,           \"BoilerRotateState\": 1,           \"PIDState\": 1         }       },       \"FA1\": {         \"General\": {           \"SupplyFanStatus\": 1,           \"GlycolReturnTemp\": 26.1,           \"HXReturnTemp\": 16.6,           \"DischargeAirTemp\": 21,           \"FanAmps\": 3.1,           \"HeatPumpStatus\": 1,           \"HeatPump1Command\": 1,           \"SupplyFanCommand\": 1,           \"SupplyFanOutput\": 75,           \"HeatOutput\": 0,           \"CoolOutput\": 0,           \"MUAEnable\": 1,           \"CoolingHeating\": 0,           \"HeatSP\": 21,           \"Schedule\": 2,           \"CoolSP\": 22,           \"Speed\": 75         }       },       \"FA2\": {         \"General\": {           \"SupplyFanStatus\": 1,           \"GlycolReturnTemp\": 20.6,           \"HXReturnTemp\": 21.1,           \"DischargeAirTemp\": 21.2,           \"FanAmps\": 3.2,           \"HeatPumpStatus\": 1,           \"HeatPump1Command\": 1,           \"SupplyFanCommand\": 1,           \"SupplyFanOutput\": 75,           \"HeatOutput\": 0,           \"CoolOutput\": 0,           \"MUAEnable\": 1,           \"CoolingHeating\": 0,           \"HeatSP\": 21,           \"Schedule\": 2,           \"CoolSP\": 22,           \"Speed\": 75,           \"DamperCommand\": 1         }       }     }   } }",
+        "payloadType": "str",
+        "x": 170,
+        "y": 180,
+        "wires": [
+            [
+                "7eecb0cc5e9ecd09"
+            ]
+        ]
+    },
+    {
+        "id": "7eecb0cc5e9ecd09",
+        "type": "function",
+        "z": "33acdda2eaf2a91b",
+        "name": "Build status + birth",
+        "func": "// ---------------------------------------------------------------------------\n// BuildingBAS gateway birth\n// In:   msg.payload = a data snapshot (nested JSON: site → system → device → points)\n// Out 1 → MQTT node \"connect\": status birth (online) + Last Will (offline), both retained\n// Out 2 → retained birth certificate on bas/<GATEWAY_ID>/birth, once connected\n// Set GATEWAY_ID in this tab's environment variables (Flow properties → Environment).\n// ---------------------------------------------------------------------------\n\nconst GATEWAY_ID = env.get(\"GATEWAY_ID\");\nif (!GATEWAY_ID) {\n    node.error(\"Set GATEWAY_ID in this flow's environment variables\");\n    return null;\n}\n\n// Top-level keys that wrap the tree but aren't part of a device's identity.\n// Shared with \"Build data message\" via the tab env, so device keys always match.\nconst SKIP_ROOT = (env.get(\"SKIP_ROOT\") || \"\").split(\",\").map((s) => s.trim()).filter(Boolean);\n\n// Point metadata. The first rule whose pattern matches the point key wins; anything a\n// rule leaves out falls back to DEFAULTS, and \"type\" to the sample value's type.\n// These are starting guesses: fill them in from the site's points list.\nconst RULES = [\n    { match: /Temp$/,                    type: \"float\", unit: \"°C\", acquisition: \"cov\", deadband: 0.2, min: -40, max: 150 },\n    { match: /SP$/,                      type: \"float\", unit: \"°C\", acquisition: \"cov\", writable: true },\n    { match: /Amps$/,                    type: \"float\", unit: \"A\",  acquisition: \"interval\", min: 0 },\n    { match: /(Output|Speed)$/,          type: \"float\", unit: \"%\",  acquisition: \"interval\", min: 0, max: 100 },\n    { match: /OutputFreq$/,              type: \"float\", unit: \"Hz\", acquisition: \"interval\", min: 0 },\n    { match: /(Command|Enable)$/,        type: \"int\",   acquisition: \"cov\", writable: true },\n    { match: /(Status|State|Running|Alarm|Mode)$/, type: \"int\", acquisition: \"cov\" },\n];\nconst DEFAULTS = { acquisition: \"interval\", writable: false };\n\n// Device types. The first rule whose pattern matches the device key wins. A type must be a\n// profile in the admin, written \"key@major.minor\". A device whose type is a known profile\n// (and that reports its required properties) is accepted instantly as a new device; one\n// with no type, or an unknown one, waits in the Birth certificates tab for review.\nconst TYPES = [\n    { match: /\\.DualTemp\\.Zone\\d+$/, type: \"DualTemp-1@1.0\" },\n    // { match: /\\.DHW\\.Boiler\\d+$/, type: \"dhw-boiler@1.0\" },\n];\n\n// --- parse input ------------------------------------------------------------\nlet snapshot = msg.payload;\nif (Buffer.isBuffer(snapshot)) snapshot = snapshot.toString(\"utf8\");\nif (typeof snapshot === \"string\") {\n    try { snapshot = JSON.parse(snapshot); }\n    catch (e) { node.error(\"Snapshot is not valid JSON\", msg); return null; }\n}\nif (!snapshot || typeof snapshot !== \"object\" || Array.isArray(snapshot)) {\n    node.error(\"Snapshot must be a JSON object\", msg);\n    return null;\n}\n\n// --- find devices: any object holding plain values is a device ----------------\nconst isObject = (v) => v !== null && typeof v === \"object\" && !Array.isArray(v);\nconst devices = [];\n\nfunction walk(obj, path) {\n    const points = Object.entries(obj).filter(([, v]) => !isObject(v));\n    if (points.length && path.length) devices.push({ path, points });\n    for (const [k, v] of Object.entries(obj)) {\n        if (isObject(v)) walk(v, [...path, k]);\n    }\n}\n\nfor (const [k, v] of Object.entries(snapshot)) {\n    if (k === \"timestamp\" || !isObject(v)) continue;\n    walk(v, SKIP_ROOT.includes(k) ? [] : [k]);\n}\n\nif (!devices.length) {\n    node.error(\"No devices found in the snapshot\", msg);\n    return null;\n}\n\n// --- describe each point ----------------------------------------------------------\nfunction inferType(value) {\n    if (typeof value === \"boolean\") return \"bool\";\n    if (typeof value === \"number\") return Number.isInteger(value) ? \"int\" : \"float\";\n    return \"string\";\n}\n\nfunction describe(key, value) {\n    const { match, ...meta } = RULES.find((r) => r.match.test(key)) || {};\n    return { key, type: meta.type || inferType(value), ...DEFAULTS, ...meta };\n}\n\nconst certificate = {\n    gateway: GATEWAY_ID,\n    timestamp: new Date().toISOString(),\n    devices: devices.map(({ path, points }) => {\n        const device_key = path.join(\".\");   // stable: e.g. Prudential301.DHW.Boiler1\n        const type = (TYPES.find((t) => t.match.test(device_key)) || {}).type;\n        return {\n            device_key,\n            name: path.slice(-2).join(\" \"),  // e.g. \"DHW Boiler1\"\n            ...(type && { type }),\n            properties: points.map(([key, value]) => describe(key, value)),\n        };\n    }),\n};\n\n// --- messages -----------------------------------------------------------------------\nconst statusTopic = `bas/${GATEWAY_ID}/status`;\nconst status = (s) => JSON.stringify({ status: s, gateway: GATEWAY_ID });\n\nconst connect = {\n    action: \"connect\",\n    broker: {\n        clientid: `gateway-${GATEWAY_ID}`,\n        birth: { topic: statusTopic, payload: status(\"online\"),  qos: 1, retain: true },\n        close: { topic: statusTopic, payload: status(\"offline\"), qos: 1, retain: true },\n        will:  { topic: statusTopic, payload: status(\"offline\"), qos: 1, retain: true },\n    },\n};\n\nconst birth = {\n    topic: `bas/${GATEWAY_ID}/birth`,\n    payload: JSON.stringify(certificate),\n    qos: 1,\n    retain: true,\n};\n\nnode.status({ fill: \"green\", shape: \"dot\", text: `${certificate.devices.length} devices` });\nreturn [connect, birth];\n",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 430,
+        "y": 180,
+        "wires": [
+            [
+                "eb0fcd04ef22823e"
+            ],
+            [
+                "a6275cede85d6de8"
+            ]
+        ]
+    },
+    {
+        "id": "a6275cede85d6de8",
+        "type": "delay",
+        "z": "33acdda2eaf2a91b",
+        "name": "after connect",
+        "pauseType": "delay",
+        "timeout": "1",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 640,
+        "y": 220,
+        "wires": [
+            [
+                "eb0fcd04ef22823e"
+            ]
+        ]
+    },
+    {
+        "id": "46d459108f161d8f",
+        "type": "comment",
+        "z": "33acdda2eaf2a91b",
+        "name": "Data: replace the test inject with your real snapshot source",
+        "info": "Feed each new snapshot (same nested shape as the point list) into \"Build data message\". The test inject repeats the sample every 30 s with msg.simulate = true (timestamp = now, decimals nudged ±2%).",
+        "x": 330,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "693db2a9d8305397",
+        "type": "inject",
+        "z": "33acdda2eaf2a91b",
+        "name": "Sample data every 30 s (test)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "simulate",
+                "v": "true",
+                "vt": "bool"
+            }
+        ],
+        "repeat": "30",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{   \"timestamp\": \"2026-09-30T16:22:43Z\",   \"Absolute\": {     \"Prudential301\": {       \"DHW\": {         \"Boiler2\": {           \"LeavingWaterTemp\": 74.9,           \"Output\": 0,           \"Alarm\": 0,           \"Command\": 0,           \"PumpStatus\": 0,           \"OutState\": 1,           \"Enable\": 1,           \"Status\": 0         },         \"Boiler1\": {           \"LeavingWaterTemp\": 83.3,           \"Output\": 0,           \"Alarm\": 0,           \"Command\": 0,           \"PumpStatus\": 1,           \"OutState\": 1,           \"Enable\": 2,           \"Status\": 0         },         \"General\": {           \"Rotate\": 0,           \"LeadBoiler\": 2,           \"TankTemp\": 74.4,           \"SupplyTemp\": 58,           \"TuningReset\": 0,           \"BoilerRunning\": 1,           \"BoilerRotateState\": 1,           \"BoilerStageSP\": 95,           \"PIDState\": 3,           \"TempSP\": 64,           \"PumpDownTime\": 120,           \"SystemEnable\": 1,           \"HotWaterAvailable\": 1         }       },       \"DualTemp\": {         \"Condenser\": {           \"CoilWaterSupplyTemp\": 26.3,           \"ChilledWaterSupplyTemp\": 25.3,           \"CoilWaterReturnTemp\": 25.9,           \"WaterReturnTemp\": 12.7,           \"ChilledWaterReturnTemp\": 25.4,           \"HotWaterSupplyTemp\": 532.9,           \"HotWaterReturnTemp\": 26.2         },         \"Tower1\": {           \"Command\": 0,           \"Status\": 1,           \"Output\": 0,           \"OutputFreq\": 0         },         \"Chiller1\": {           \"SP\": 0,           \"Enable\": 1,           \"Status\": 0         },         \"Boiler1\": {           \"EnterWaterTemp\": 25.9,           \"LeaveWaterTemp\": 33.7,           \"Output\": 0,           \"Alarm\": 0,           \"PumpStatus\": 0,           \"Status\": 0,           \"Command\": 0,           \"Enable\": 2,           \"OutState\": 1         },         \"Boiler2\": {           \"EnterWaterTemp\": 25.6,           \"LeaveWaterTemp\": 25.2,           \"Output\": 0,           \"Alarm\": 0,           \"PumpStatus\": 0,           \"Status\": 0,           \"Command\": 0,           \"Enable\": 2,           \"OutState\": 1         },         \"Zone1\": {           \"PumpRotateState\": 1,           \"PumpBOutState\": 2,           \"PumpAOutState\": 2,           \"PumpRunning\": 2         },         \"Zone2\": {           \"PumpRotateState\": 1,           \"PumpBOutState\": 2,           \"PumpAOutState\": 2,           \"PumpRunning\": 2         },         \"ChilledWaterPump1\": {           \"Command\": 1,           \"Status\": 1         },         \"MiscHeatingPump1\": {           \"Status\": 0,           \"Command\": 0         },         \"CondenserWaterPump1\": {           \"Status\": 1,           \"Command\": 1         },         \"DualTemp1\": {           \"PumpStatus\": 1,           \"Alarm\": 1,           \"PumpCommand\": 1         },         \"DualTemp2\": {           \"PumpStatus\": 1,           \"Alarm\": 1,           \"PumpCommand\": 1         },         \"HeatPump1\": {           \"Status\": 1,           \"Alarm\": 1,           \"Command\": 1         },         \"HeatPump2\": {           \"Status\": 1,           \"Alarm\": 1,           \"Command\": 1         },         \"General\": {           \"OutdoorAirTemp\": 15.9,           \"HotWaterOutsideAirResetB\": 15,           \"HotWaterOutsideAirResetA\": 0,           \"HeatEnableOutSP\": 20,           \"CoolEnableOutSP\": 7,           \"HotWaterLowSP\": 60,           \"HotWaterHighSP\": 50,           \"CoolEnableDualTemp\": 32,           \"ColdWaterSP\": 26,           \"BoilerRunning\": 0,           \"HotWaterSP\": 50,           \"PumpDownTime\": 180,           \"BoilerStageSP\": 95,           \"Bypass\": 0,           \"BoilerRotate\": 0,           \"HotWaterAvailable\": 0,           \"TuningReset\": 0,           \"PumpRotation\": 0,           \"CoolHeatMode\": 0,           \"LeadBoiler\": 1,           \"LeadHeatPump\": 2,           \"LeadDualPump\": 2,           \"BoilerRotateState\": 1,           \"PIDState\": 1         }       },       \"FA1\": {         \"General\": {           \"SupplyFanStatus\": 1,           \"GlycolReturnTemp\": 26.1,           \"HXReturnTemp\": 16.6,           \"DischargeAirTemp\": 21,           \"FanAmps\": 3.1,           \"HeatPumpStatus\": 1,           \"HeatPump1Command\": 1,           \"SupplyFanCommand\": 1,           \"SupplyFanOutput\": 75,           \"HeatOutput\": 0,           \"CoolOutput\": 0,           \"MUAEnable\": 1,           \"CoolingHeating\": 0,           \"HeatSP\": 21,           \"Schedule\": 2,           \"CoolSP\": 22,           \"Speed\": 75         }       },       \"FA2\": {         \"General\": {           \"SupplyFanStatus\": 1,           \"GlycolReturnTemp\": 20.6,           \"HXReturnTemp\": 21.1,           \"DischargeAirTemp\": 21.2,           \"FanAmps\": 3.2,           \"HeatPumpStatus\": 1,           \"HeatPump1Command\": 1,           \"SupplyFanCommand\": 1,           \"SupplyFanOutput\": 75,           \"HeatOutput\": 0,           \"CoolOutput\": 0,           \"MUAEnable\": 1,           \"CoolingHeating\": 0,           \"HeatSP\": 21,           \"Schedule\": 2,           \"CoolSP\": 22,           \"Speed\": 75,           \"DamperCommand\": 1         }       }     }   } }",
+        "payloadType": "str",
+        "x": 190,
+        "y": 340,
+        "wires": [
+            [
+                "486f8733dd5ca5c6"
+            ]
+        ]
+    },
+    {
+        "id": "486f8733dd5ca5c6",
+        "type": "function",
+        "z": "33acdda2eaf2a91b",
+        "name": "Build data message",
+        "func": "// ---------------------------------------------------------------------------\n// BuildingBAS gateway data\n// In:   msg.payload = a data snapshot (nested JSON: site → system → device → points),\n//       the same shape \"Build status + birth\" reads, so device keys match the birth.\n// Out → bas/<GATEWAY_ID>/data (not retained):\n//       { timestamp, devices: { \"<device_key>\": { \"<key>\": value, ... } } }\n// Test aid: msg.simulate = true stamps \"now\" and nudges decimal values by up to ±2%.\n// ---------------------------------------------------------------------------\n\nconst GATEWAY_ID = env.get(\"GATEWAY_ID\");\nif (!GATEWAY_ID) {\n    node.error(\"Set GATEWAY_ID in this flow's environment variables\");\n    return null;\n}\nconst SKIP_ROOT = (env.get(\"SKIP_ROOT\") || \"\").split(\",\").map((s) => s.trim()).filter(Boolean);\n\nlet snapshot = msg.payload;\nif (Buffer.isBuffer(snapshot)) snapshot = snapshot.toString(\"utf8\");\nif (typeof snapshot === \"string\") {\n    try { snapshot = JSON.parse(snapshot); }\n    catch (e) { node.error(\"Snapshot is not valid JSON\", msg); return null; }\n}\nif (!snapshot || typeof snapshot !== \"object\" || Array.isArray(snapshot)) {\n    node.error(\"Snapshot must be a JSON object\", msg);\n    return null;\n}\n\nconst isObject = (v) => v !== null && typeof v === \"object\" && !Array.isArray(v);\nconst nudge = (v) => (msg.simulate && typeof v === \"number\" && !Number.isInteger(v))\n    ? Math.round(v * (1 + (Math.random() - 0.5) * 0.04) * 10) / 10\n    : v;\n\n// Same walk as the birth: any object holding plain values is a device.\nconst devices = {};\nfunction walk(obj, path) {\n    const points = Object.entries(obj).filter(([, v]) => !isObject(v));\n    if (points.length && path.length) {\n        devices[path.join(\".\")] = Object.fromEntries(points.map(([k, v]) => [k, nudge(v)]));\n    }\n    for (const [k, v] of Object.entries(obj)) {\n        if (isObject(v)) walk(v, [...path, k]);\n    }\n}\nfor (const [k, v] of Object.entries(snapshot)) {\n    if (k === \"timestamp\" || !isObject(v)) continue;\n    walk(v, SKIP_ROOT.includes(k) ? [] : [k]);\n}\n\nconst count = Object.keys(devices).length;\nif (!count) {\n    node.error(\"No devices found in the snapshot\", msg);\n    return null;\n}\n\nconst timestamp = !msg.simulate && snapshot.timestamp ? snapshot.timestamp : new Date().toISOString();\nnode.status({ fill: \"green\", shape: \"dot\", text: `${count} devices @ ${new Date().toLocaleTimeString()}` });\n\nreturn {\n    topic: `bas/${GATEWAY_ID}/data`,\n    payload: JSON.stringify({ timestamp, devices }),\n    qos: 1,\n    retain: false,\n};\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 450,
+        "y": 340,
+        "wires": [
+            [
+                "eb0fcd04ef22823e"
+            ]
+        ]
+    },
+    {
+        "id": "eb0fcd04ef22823e",
+        "type": "mqtt out",
+        "z": "33acdda2eaf2a91b",
+        "name": "Docker MQTT",
+        "topic": "",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "3859f37c76a3d5c6",
+        "x": 840,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "3859f37c76a3d5c6",
+        "type": "mqtt-broker",
+        "name": "",
+        "broker": "mqtt",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": false,
+        "usetls": false,
+        "protocolVersion": 4,
+        "keepalive": 60,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "bas",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "bas",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "Disconnected",
+        "closeMsg": {},
+        "willTopic": "bas",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "Disconnected Unexpectedly",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    }
+]

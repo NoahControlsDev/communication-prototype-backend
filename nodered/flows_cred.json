@@ -1,0 +1,6 @@
+{
+    "3859f37c76a3d5c6": {
+        "user": "${MQTT_USERNAME}",
+        "password": "${MQTT_PASSWORD}"
+    }
+}

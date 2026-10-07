@@ -1,0 +1,9 @@
+# Files Node-RED creates at runtime in its /data folder
+.config.*.json
+.config.*.json.backup
+.*.backup
+.npm
+node_modules
+lib
+package.json
+package-lock.json

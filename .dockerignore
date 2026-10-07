@@ -1,0 +1,10 @@
+node_modules
+.env
+*.log
+Dockerfile
+docker-compose.yml
+
+# Data folders of the other services
+mosquitto
+nodered
+pgadmin
