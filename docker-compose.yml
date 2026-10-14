@@ -2,8 +2,6 @@ services:
   db:
     image: postgres:18         
     container_name: bas-postgres
-    # Values come from Backend/.env. Postgres only applies them when the
-    # pgdata volume is first created; changing them later won't alter an existing database.
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -25,12 +23,16 @@ services:
     environment:
       MQTT_USERNAME: ${MQTT_USERNAME:?set MQTT_USERNAME in .env}
       MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in .env}
+      MQTT_GATEWAY_USERNAME: ${MQTT_GATEWAY_USERNAME:?set MQTT_GATEWAY_USERNAME in .env}
+      MQTT_GATEWAY_PASSWORD: ${MQTT_GATEWAY_PASSWORD:?set MQTT_GATEWAY_PASSWORD in .env}
 
     command: >
-      sh -c 'rm -f /mosquitto/passwd
-      && mosquitto_passwd -b -c /mosquitto/passwd "$$MQTT_USERNAME" "$$MQTT_PASSWORD"
-      && chown mosquitto:mosquitto /mosquitto/passwd
-      && chmod 0700 /mosquitto/passwd
+      sh -c 'rm -f /mosquitto/passwd /mosquitto/acl
+      && mosquitto_passwd -b -c /mosquitto/passwd "$MQTT_USERNAME" "$MQTT_PASSWORD"
+      && mosquitto_passwd -b /mosquitto/passwd "$MQTT_GATEWAY_USERNAME" "$MQTT_GATEWAY_PASSWORD"
+      && printf "user %s\ntopic read bas/#\ntopic write bas/+/cmd\n\nuser %s\ntopic read bas/+/cmd\ntopic write bas/+/status\ntopic write bas/+/birth\ntopic write bas/+/data\ntopic write bas/+/cmd/ack\n" "$MQTT_USERNAME" "$MQTT_GATEWAY_USERNAME" > /mosquitto/acl
+      && chown mosquitto:mosquitto /mosquitto/passwd /mosquitto/acl
+      && chmod 0700 /mosquitto/passwd /mosquitto/acl
       && exec mosquitto -c /mosquitto/config/mosquitto.conf'
     ports:
       - "1884:1883"                   
@@ -40,7 +42,6 @@ services:
       - mosquitto-data:/mosquitto/data
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 1883"]
-      # Quick checks while starting, then rarely: each check shows up in the broker log.
       start_period: 20s
       start_interval: 2s
       interval: 60s
@@ -48,27 +49,21 @@ services:
   nodered:
     image: nodered/node-red:latest
     container_name: bas-nodered
-    # Simulated gateway: runs ./nodered/flows.json, which publishes status, birth and
-    # data for GW-PRU301 to the mqtt service. Editor at http://localhost:1880.
     environment:
-      # Filled into the flow's MQTT broker login (see ./nodered/flows_cred.json).
-      MQTT_USERNAME: ${MQTT_USERNAME:?set MQTT_USERNAME in .env}
-      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in .env}
+      MQTT_USERNAME: ${MQTT_GATEWAY_USERNAME:?set MQTT_GATEWAY_USERNAME in .env}
+      MQTT_PASSWORD: ${MQTT_GATEWAY_PASSWORD:?set MQTT_GATEWAY_PASSWORD in .env}
     ports:
-      - "127.0.0.1:1880:1880"         # this machine only: the editor has no login
+      - "127.0.0.1:1880:1880"
     volumes:
       - ./nodered:/data
     depends_on:
       mqtt:
-        # The flow connects and publishes its birth once, right at startup.
         condition: service_healthy
   backend:
     build: .
     container_name: bas-backend
-    # The API and the MQTT subscriber. Applies pending migrations each time it starts.
     environment:
       PORT: 3000
-      # Inside Docker the other services are reached by name, not through localhost.
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
@@ -78,13 +73,12 @@ services:
       MQTT_USERNAME: ${MQTT_USERNAME:?set MQTT_USERNAME in .env}
       MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in .env}
     ports:
-      - "127.0.0.1:${PORT:-3000}:3000"   # this machine only: the API has no login
+      - "127.0.0.1:${PORT:-3000}:3000"
     depends_on:
       db:
         condition: service_healthy
       mqtt:
         condition: service_healthy
-    # `docker compose up --watch`: restart the API when its code changes, without a rebuild.
     develop:
       watch:
         - action: sync+restart
@@ -97,12 +91,10 @@ services:
   frontend:
     build: ../Frontend
     container_name: bas-frontend
-    # The built admin pages, served by nginx, which also forwards /api to the backend.
     ports:
-      - "127.0.0.1:${FRONTEND_PORT:-5300}:80"   # this machine only
+      - "127.0.0.1:${FRONTEND_PORT:-5300}:80"
     depends_on:
       - backend
-    # `docker compose up --watch`: rebuild the pages when the frontend code changes.
     develop:
       watch:
         - action: rebuild
@@ -115,12 +107,10 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?set PGADMIN_EMAIL in .env}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in .env}
-      # Skip the extra "master password" prompt when saving the DB password in pgAdmin.
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
-      - "127.0.0.1:5050:80"           # this machine only, not the rest of your network
+      - "127.0.0.1:5050:80"
     volumes:
-      # Pre-registers the db service. Only read the first time pgadmin-data is created.
       - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
       - pgadmin-data:/var/lib/pgadmin
     depends_on:

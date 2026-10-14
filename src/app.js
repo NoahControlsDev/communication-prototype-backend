@@ -8,7 +8,6 @@ import { errorHandler } from './middleware/errorHandler.js'
 const app = express()
 
 app.use(cors({ origin: config.corsOrigin }))
-// Default is 100kb; a pasted gateway birth (dozens of devices × dozens of properties) is bigger.
 app.use(express.json({ limit: '10mb' }))
 
 app.use('/api', routes)

@@ -2,31 +2,8 @@ import pool from '../db/index.js'
 import config from '../config/index.js'
 import { HttpError } from '../utils/HttpError.js'
 
-// ---------------------------------------------------------------------------
-// Data messages. Published (not retained) on bas/<GATEWAY_ID>/data, after the birth:
-//
-//   {
-//     "timestamp": "2026-09-30T18:00:00Z",                  // optional, defaults to now
-//     "devices": {
-//       "Prudential301.DHW.Boiler1": { "LeavingWaterTemp": 74.9, "Alarm": 0, ... },
-//       ...
-//     }
-//   }
-//
-// Every value ends up in one of three states:
-//   accepted     → `reading`: device on this gateway + approved property. quality 0 = within
-//                  the effective range (declared, narrowed by overrides), 2 = outside it
-//   not approved → `unapproved_reading` with a reason, kept for UNAPPROVED_RETENTION_HOURS (24).
-//                  Approving it in time moves it into `reading` (promoteUnapproved); otherwise
-//                  purgeExpired() deletes it
-//   declined     → dropped, never saved: a declined_point rule matches, or the device is
-//                  unknown on this gateway and its latest birth certificate was declined
-// ---------------------------------------------------------------------------
-
 export const DATA_TOPIC = /^bas\/([^/]+)\/data$/
 
-// jsonb value → number for `reading.value`: numbers as-is, booleans 1/0, null stays null.
-// Anything else (strings, objects) can't be a reading.
 const AS_NUMBER = (v) => `CASE jsonb_typeof(${v})
     WHEN 'number'  THEN (${v} #>> '{}')::double precision
     WHEN 'boolean' THEN CASE WHEN (${v} #>> '{}') = 'true' THEN 1 ELSE 0 END
@@ -61,7 +38,6 @@ function flatten(payload) {
   return { time, deviceKeys, keys, values }
 }
 
-// Stores one data message. Returns { time, stored, duplicates, dropped, unapproved: { reason: count } }.
 export async function ingestData(gatewayKey, payload) {
   const { time, deviceKeys, keys, values } = flatten(payload)
   if (!keys.length) return { time, stored: 0, duplicates: 0, dropped: 0, unapproved: {} }
@@ -125,10 +101,6 @@ export async function ingestData(gatewayKey, payload) {
   return { time, stored: r.stored, duplicates: r.accepted - r.stored, dropped: r.dropped, unapproved: r.unapproved }
 }
 
-// Moves held values whose device + property are now approved (on the right gateway)
-// into `reading`. Called after anything that can approve data: accepting certificates,
-// approving extensions, creating/syncing devices. Returns how many rows were promoted.
-// Scans the held rows, which is fine for small volumes.
 export async function promoteUnapproved(db = pool) {
   const { rows } = await db.query(
     `WITH movable AS (
@@ -157,10 +129,6 @@ export async function promoteUnapproved(db = pool) {
   return rows[0].promoted
 }
 
-// --- views ---------------------------------------------------------------------------
-
-// Latest stored value of every approved property that has data.
-// LATERAL + the (device_property_id, time) primary key = one index lookup per property.
 export async function latestReadings() {
   const { rows } = await pool.query(
     `SELECT g.gateway_key, g.status AS gateway_status, d.id AS device_id, d.device_key, d.name AS device_name,
@@ -181,9 +149,6 @@ export async function latestReadings() {
   return rows
 }
 
-// Held values summarised per point: how many, first/last seen, latest value, why, and when
-// the oldest one is deleted (expires_at). Values keep arriving, so a point keeps a rolling
-// window of the last 24 h until it's approved or declined.
 export async function unapprovedSummary() {
   const { rows } = await pool.query(
     `SELECT gateway_key, device_key, key, reason,
@@ -200,7 +165,6 @@ export async function unapprovedSummary() {
   return { retention_hours: config.unapprovedRetentionHours, points: rows }
 }
 
-// Deletes held values older than the retention window. Returns how many.
 export async function purgeExpired() {
   const { rowCount } = await pool.query(
     'DELETE FROM unapproved_reading WHERE received_at < now() - make_interval(hours => $1)',
@@ -209,7 +173,6 @@ export async function purgeExpired() {
   return rowCount
 }
 
-// Runs purgeExpired now and every 10 minutes.
 export function startRetention() {
   const run = () => purgeExpired()
     .then((n) => { if (n) console.log(`Retention: deleted ${n} not-approved values older than ${config.unapprovedRetentionHours} h`) })
@@ -218,10 +181,6 @@ export function startRetention() {
   setInterval(run, 10 * 60 * 1000).unref()
 }
 
-// --- declined ---------------------------------------------------------------------------
-
-// Declines a whole device (key null) or one property: future values are dropped and
-// anything already held for it is deleted. Returns { rule, deleted }.
 export async function declinePoint({ gateway_key, device_key, key = null }) {
   const { rows: [rule] } = await pool.query(
     `INSERT INTO declined_point (gateway_key, device_key, key) VALUES ($1, $2, $3)
@@ -237,8 +196,6 @@ export async function declinePoint({ gateway_key, device_key, key = null }) {
   return { rule, deleted: rowCount }
 }
 
-// Declined rules, plus devices dropped because their latest birth certificate is
-// declined (undone by reopening or deleting the certificate, not here).
 export async function listDeclined() {
   const [rules, certs] = await Promise.all([
     pool.query('SELECT * FROM declined_point ORDER BY gateway_key, device_key, key NULLS FIRST'),
@@ -254,13 +211,11 @@ export async function listDeclined() {
   return { rules: rules.rows, certificates: certs.rows.filter((c) => c.status === 'declined') }
 }
 
-// Undo a declined rule: its data is held (or stored, if approved) again from now on.
 export async function undeclinePoint(id) {
   const { rowCount } = await pool.query('DELETE FROM declined_point WHERE id = $1', [id])
   return rowCount > 0
 }
 
-// Deletes held values matching every given filter (gateway_key, device_key, key, reason).
 export async function deleteUnapproved(filters) {
   const conditions = [], params = []
   for (const col of ['gateway_key', 'device_key', 'key', 'reason']) {
@@ -274,10 +229,6 @@ export async function deleteUnapproved(filters) {
   return rowCount
 }
 
-// --- charts ----------------------------------------------------------------------------
-
-// Time ranges the charts offer. Values are averaged into buckets (plain Postgres date_bin)
-// so a chart gets at most ~points buckets however much raw data the range holds.
 export const RANGES = {
   '15m': { interval: '15 minutes', seconds: 900 },
   '1h':  { interval: '1 hour',     seconds: 3600 },
@@ -287,8 +238,6 @@ export const RANGES = {
 }
 const bucketFor = (range, points) => `${Math.max(1, Math.ceil(RANGES[range].seconds / points))} seconds`
 
-// One property over a range: its metadata (unit, effective range) + bucketed points, oldest first.
-// Each point: t (bucket start), v (average), min/max (spread in the bucket), q (worst quality), n (raw count).
 export async function propertyHistory(devicePropertyId, range = '1h', points = 300) {
   const { rows: [property] } = await pool.query(
     `SELECT dp.id, dp.key, dp.approved, d.id AS device_id, d.name AS device_name, d.device_key,
@@ -313,7 +262,6 @@ export async function propertyHistory(devicePropertyId, range = '1h', points = 3
   return { property, range, points: rows }
 }
 
-// Every property of a device over a range, for small multiples: fewer buckets per property.
 export async function deviceSeries(deviceId, range = '1h', points = 60) {
   const { rows } = await pool.query(
     `SELECT dp.id, dp.key, pp.unit, coalesce(dp.min_override, pp.min) AS lo, coalesce(dp.max_override, pp.max) AS hi,
@@ -335,7 +283,6 @@ export async function deviceSeries(deviceId, range = '1h', points = 60) {
   return rows
 }
 
-// Values arriving per bucket, split into stored (reading.time) and held (received_at).
 export async function ingestionStats(range = '1h', points = 60) {
   const { rows } = await pool.query(
     `SELECT date_bin($2::interval, ts, '2000-01-01') AS t,

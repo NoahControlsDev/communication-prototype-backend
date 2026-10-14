@@ -1,9 +1,6 @@
 import pool from '../db/index.js'
 import { insertRow, updateRow, deleteRow } from '../db/helpers.js'
 
-// Systems and gateways: small lookup tables devices point at.
-// Deleting one is blocked by the database while devices still use it.
-
 export async function listSystems() {
   const { rows } = await pool.query(`
     SELECT s.*, (SELECT count(*)::int FROM device d WHERE d.system_id = s.id) AS device_count
@@ -22,10 +19,11 @@ export async function listGateways() {
   return rows
 }
 
-// From bas/<GATEWAY_ID>/status: 'online' (birth) or 'offline' (Last Will / disconnect).
-// Unknown gateways are created, so their state is known before any device is accepted.
-// status_at only moves when the state changes: retained messages are re-delivered on
-// every reconnect and shouldn't look like fresh events.
+export async function getGatewayStatus(gatewayKey) {
+  const { rows } = await pool.query('SELECT status FROM gateway WHERE gateway_key = $1', [gatewayKey])
+  return rows[0]?.status ?? null
+}
+
 export async function setGatewayStatus(gatewayKey, status) {
   await pool.query(
     `INSERT INTO gateway (gateway_key, status, status_at) VALUES ($1, $2, now())

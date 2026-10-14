@@ -12,7 +12,8 @@ const config = {
   mqttUrl: process.env.MQTT_URL,
   mqttUsername: process.env.MQTT_USERNAME,
   mqttPassword: process.env.MQTT_PASSWORD,
-  // Not-approved data is kept this long, then deleted unless approved first.
+  mqttGatewayUsername: process.env.MQTT_GATEWAY_USERNAME || process.env.MQTT_USERNAME,
+  mqttGatewayPassword: process.env.MQTT_GATEWAY_PASSWORD || process.env.MQTT_PASSWORD,
   unapprovedRetentionHours: Number(process.env.UNAPPROVED_RETENTION_HOURS) || 24,
 }
 

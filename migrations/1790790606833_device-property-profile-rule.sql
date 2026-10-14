@@ -1,14 +1,10 @@
 -- Up Migration
 
--- A device property generated from the class must come from the device's OWN profile:
--- device_property.profile_property_id → profile_property.profile_id = device.profile_id.
--- Spans three tables, so it's enforced with triggers.
-
 CREATE FUNCTION device_property_check_profile() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.profile_property_id IS NULL THEN
-    RETURN NEW; -- extension
+    RETURN NEW;
   END IF;
 
   IF NOT EXISTS (
@@ -28,8 +24,6 @@ CREATE TRIGGER device_property_check_profile
   BEFORE INSERT OR UPDATE OF device_id, profile_property_id ON device_property
   FOR EACH ROW EXECUTE FUNCTION device_property_check_profile();
 
--- The other direction: a device can't switch profile while it has standard
--- properties generated from the old one.
 CREATE FUNCTION device_check_profile_change() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN

@@ -5,6 +5,8 @@ import birthCertificates from './birthCertificates.js'
 import data from './data.js'
 import fields from './fields.js'
 import connections from './connections.js'
+import alerts from './alerts.js'
+import { getEvents } from '../controllers/alertController.js'
 import { getEnums } from '../controllers/profileController.js'
 import * as site from '../controllers/siteController.js'
 
@@ -21,6 +23,8 @@ router.use('/birth-certificates', birthCertificates)
 router.use('/data', data)
 router.use('/fields', fields)
 router.use('/connections', connections)
+router.use('/alerts', alerts)
+router.get('/events', getEvents)
 
 router.get('/systems', site.getSystems)
 router.post('/systems', site.postSystem)

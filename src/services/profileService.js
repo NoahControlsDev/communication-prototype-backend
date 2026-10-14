@@ -1,7 +1,6 @@
 import pool from '../db/index.js'
 import { insertRow, updateRow, deleteRow } from '../db/helpers.js'
 
-// Values of the Postgres enums, so the frontend's dropdowns always match the database.
 export async function listEnums() {
   const { rows } = await pool.query(`
     SELECT t.typname AS name, array_agg(e.enumlabel::text ORDER BY e.enumsortorder) AS values
@@ -9,8 +8,6 @@ export async function listEnums() {
     GROUP BY t.typname`)
   return Object.fromEntries(rows.map((r) => [r.name, r.values]))
 }
-
-// --- profiles ---
 
 export async function listProfiles() {
   const { rows } = await pool.query(`
@@ -29,10 +26,7 @@ export async function profileExists(id) {
 
 export const createProfile = (data) => insertRow(pool, 'profile', data)
 export const updateProfile = (id, data) => updateRow(pool, 'profile', id, data)
-// Blocked by the database while devices use this profile; cascades to its properties.
 export const deleteProfile = (id) => deleteRow(pool, 'profile', id)
-
-// --- profile properties ---
 
 export async function listProperties(profileId) {
   const { rows } = await pool.query(
@@ -44,7 +38,5 @@ export async function listProperties(profileId) {
 
 export const createProperty = (profileId, data) =>
   insertRow(pool, 'profile_property', { profile_id: profileId, ...data })
-// Narrowing min/max is checked against existing device overrides by a DB trigger.
 export const updateProperty = (id, data) => updateRow(pool, 'profile_property', id, data)
-// Cascades to the device_property rows generated from it.
 export const deleteProperty = (id) => deleteRow(pool, 'profile_property', id)

@@ -3,33 +3,6 @@ import { insertRow } from '../db/helpers.js'
 import { HttpError } from '../utils/HttpError.js'
 import { generateProperties, addUnknownExtensions } from './deviceService.js'
 
-// ---------------------------------------------------------------------------
-// Gateway birth message (§1.6, §5.6). Every gateway publishes this RETAINED on
-// connect, before any data, declaring each device's complete property set:
-//
-//   topic  bas/<GATEWAY_ID>/birth
-//   {
-//     "gateway": "GW-01",                               // optional, defaults to the topic
-//     "timestamp": "2026-09-30T18:00:00Z",
-//     "devices": [
-//       {
-//         "device_key": "Prudential301.DHW.Boiler1",    // stable key from the gateway (§1.2)
-//         "name": "DHW Boiler1", "site_tag": "B01",     // optional
-//         "type": "dhw-boiler@1.0",                     // device type = profile key@major.minor
-//                                                       // (a known type is accepted instantly)
-//         "properties": [
-//           { "key": "LeavingWaterTemp", "type": "float", "unit": "°C",
-//             "acquisition": "cov", "deadband": 0.2, "min": 0, "max": 120, "writable": false }
-//         ]
-//       }
-//     ]
-//   }
-//
-// Each device becomes one certificate for review. Connection state travels
-// separately on bas/<GATEWAY_ID>/status (online = birth, offline = Last Will).
-// For manual submission a single device object (with "gateway") is accepted too.
-// ---------------------------------------------------------------------------
-
 const PROPERTY_META = ['kind', 'type', 'unit', 'acquisition', 'deadband', 'min', 'max', 'writable']
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : typeof v === 'number' ? String(v) : null)
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
@@ -40,7 +13,7 @@ function normalizeProperty(p, deviceKey) {
   if (typeof p === 'string') p = { key: p }
   const key = isObject(p) ? str(p.key ?? p.name) : null
   if (!key) throw new HttpError(400, `Device ${deviceKey ?? '?'}: every property needs a key`)
-  const src = { ...p, type: p.type ?? p.datatype } // "datatype" accepted as an alias
+  const src = { ...p, type: p.type ?? p.datatype }
   const out = { key }
   for (const m of PROPERTY_META) if (src[m] !== undefined && src[m] !== null) out[m] = src[m]
   if (typeof out.acquisition === 'string') out.acquisition = out.acquisition.toLowerCase()
@@ -59,14 +32,14 @@ function normalizeDevice(d, { gatewayKey, topic, timestamp, requireKey }) {
   const props = new Map()
   for (const p of list) {
     const n = normalizeProperty(p, deviceKey)
-    props.set(n.key, n) // duplicates: last one wins
+    props.set(n.key, n)
   }
 
   return {
     topic,
     device_key: deviceKey,
     gateway_key: str(d.gateway ?? d.gateway_key) ?? gatewayKey,
-    declared_profile: str(d.type ?? d.profile), // "type" preferred; "profile" still accepted
+    declared_profile: str(d.type ?? d.profile),
     name: str(d.name),
     site_tag: str(d.site_tag),
     fields: [...props.values()],
@@ -74,7 +47,6 @@ function normalizeDevice(d, { gatewayKey, topic, timestamp, requireKey }) {
   }
 }
 
-// Gateway birth message (or a single device object) → one certificate per device.
 export function normalize(topic, payload) {
   if (!isObject(payload)) throw new HttpError(400, 'Birth message must be a JSON object')
   const gatewayKey = str(payload.gateway ?? payload.gateway_key ?? payload.GATEWAY_ID)
@@ -87,13 +59,6 @@ export function normalize(topic, payload) {
   return devices.map((d) => normalizeDevice(d, ctx))
 }
 
-// Stores one certificate per device and returns [{ id, device_key, result, review_reason? }]:
-//   auto_accepted → its declared type is a pre-approved profile it satisfies: the device
-//                   instance was created on the spot, no review needed
-//   new           → a fresh pending certificate (review_reason says why it wasn't automatic)
-//   updated       → refreshed the device's existing pending certificate
-//   unchanged     → identical to the device's last decided certificate, so nothing to do.
-//                   Matters because retained births are re-delivered every time we reconnect.
 export async function ingest(topic, payload) {
   const results = []
   for (const c of normalize(topic, payload)) {
@@ -112,8 +77,6 @@ export async function ingest(topic, payload) {
       }
     }
 
-    // A pending certificate for the same device is refreshed (unique index
-    // birth_certificate_one_pending_idx) instead of piling up duplicates.
     const { rows: [row] } = await pool.query(
       `INSERT INTO birth_certificate
          (topic, device_key, gateway_key, declared_profile, name, site_tag, fields, payload)
@@ -137,11 +100,8 @@ export async function ingest(topic, payload) {
   return results
 }
 
-// --- auto-accept ---------------------------------------------------------------------------
-
 const TYPE_REF = /^(.+)@(\d+)\.(\d+)$/
 
-// "dhw-boiler@1.0" → that exact version; "dhw-boiler" → its latest version.
 async function resolveType(db, ref) {
   const m = ref.match(TYPE_REF)
   const { rows } = m
@@ -152,10 +112,6 @@ async function resolveType(db, ref) {
 
 const differs = (a, b) => a != null && b != null && String(a).toLowerCase() !== String(b).toLowerCase()
 
-// → { profileId } when the certificate can be accepted without review, otherwise { reason }.
-// A declared type is trusted when it names a profile that allows auto-accept, the device
-// reports every required property (the contract, §2.1), nothing contradicts the profile's
-// unit or type, and nobody declined this device or registered it as something else.
 async function autoAcceptCheck(db, cert) {
   if (!cert.declared_profile) return { reason: 'No device type declared' }
   if (!cert.device_key) return { reason: 'No device key' }
@@ -211,7 +167,6 @@ async function autoAcceptCheck(db, cert) {
   return { profileId: profile.id }
 }
 
-// Accepts a pending certificate on the spot if its type allows; otherwise records why not.
 async function tryAutoAccept(id) {
   try {
     return await withTransaction(async (client) => {
@@ -226,7 +181,7 @@ async function tryAutoAccept(id) {
       return { accepted: true }
     })
   } catch (err) {
-    if (err.status === 409) return { accepted: false } // another backend instance decided it first
+    if (err.status === 409) return { accepted: false }
     throw err
   }
 }
@@ -248,8 +203,6 @@ export async function listCertificates(status) {
   return rows
 }
 
-// The certificate plus everything needed to decide on it: an existing device with
-// the same key, whether the gateway exists, and how well each profile fits its fields.
 export async function getCertificate(id) {
   const { rows } = await pool.query('SELECT * FROM birth_certificate WHERE id = $1', [id])
   const cert = rows[0]
@@ -316,7 +269,6 @@ async function findOrCreateGateway(client, gatewayKey) {
   return rows[0]?.id ?? (await insertRow(client, 'gateway', { gateway_key: gatewayKey })).id
 }
 
-// A new profile chosen while accepting: created once, then used like an existing one.
 async function resolveProfile(client, profile) {
   if (profile.mode === 'new') {
     const { properties, ...data } = profile.data
@@ -327,10 +279,6 @@ async function resolveProfile(client, profile) {
   return profile
 }
 
-// Accepts one certificate inside the caller's transaction:
-//  • device with this key already exists → its unknown fields become extensions awaiting review
-//  • otherwise → create the device (pending) on the chosen profile; certificate fields the
-//    profile doesn't declare become extensions awaiting review (§2.1)
 async function acceptOne(client, id, decision) {
   const cert = await lockPending(client, id)
   const fieldKeys = cert.fields.map((f) => f.key)
@@ -383,8 +331,6 @@ export async function accept(id, decision) {
   })
 }
 
-// Accepts many certificates onto one profile (e.g. every device with the same field set),
-// all or nothing. Device details come from each certificate. A new profile is created once.
 export async function acceptMany(ids, profileDecision) {
   return withTransaction(async (client) => {
     const profile = await resolveProfile(client, profileDecision)
@@ -395,15 +341,13 @@ export async function acceptMany(ids, profileDecision) {
       } catch (err) {
         const { rows } = await client.query('SELECT device_key FROM birth_certificate WHERE id = $1', [id])
         err.message = `Certificate ${rows[0]?.device_key ?? `#${id}`}: ${err.message}`
-        throw err // rolls back the whole batch
+        throw err
       }
     }
     return results
   })
 }
 
-// Data from a device that is declined is not saved at all, so declining its certificate also
-// deletes what is already held for it (unless the device exists on that gateway after all).
 async function dropHeldFor(db, certIds) {
   await db.query(
     `DELETE FROM unapproved_reading u
@@ -415,7 +359,6 @@ async function dropHeldFor(db, certIds) {
   )
 }
 
-// Declines every pending certificate at once. Returns how many were declined.
 export async function declineAll() {
   const { rows } = await pool.query(
     `UPDATE birth_certificate SET status = 'declined', decided_at = now() WHERE status = 'pending' RETURNING id`,
@@ -424,7 +367,6 @@ export async function declineAll() {
   return rows.length
 }
 
-// Declines the given certificates; ones already decided are skipped. Returns how many were declined.
 export async function declineMany(ids) {
   const { rowCount } = await pool.query(
     `UPDATE birth_certificate SET status = 'declined', decided_at = now()
@@ -435,9 +377,6 @@ export async function declineMany(ids) {
   return rowCount
 }
 
-// Puts declined certificates back to pending so they can be reviewed again.
-// Fails (all or nothing) if the same device already has a newer pending certificate,
-// since a device can only have one pending at a time.
 export async function reopenMany(ids) {
   return withTransaction(async (client) => {
     let reopened = 0
@@ -461,9 +400,6 @@ export async function reopenMany(ids) {
   })
 }
 
-// Removes certificate records entirely (any status). Devices created by accepting
-// them stay. If the gateway sends the device again, e.g. its retained birth on the
-// next reconnect, it arrives as a brand-new pending certificate.
 export async function deleteMany(ids) {
   const { rowCount } = await pool.query('DELETE FROM birth_certificate WHERE id = ANY($1::int[])', [ids])
   return rowCount

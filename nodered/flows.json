@@ -19,6 +19,37 @@
         ]
     },
     {
+        "id": "3859f37c76a3d5c6",
+        "type": "mqtt-broker",
+        "name": "",
+        "broker": "mqtt",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": false,
+        "usetls": false,
+        "protocolVersion": 4,
+        "keepalive": 60,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "bas",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "bas",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "Disconnected",
+        "closeMsg": {},
+        "willTopic": "bas",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "Disconnected Unexpectedly",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
         "id": "3faa448502f711e4",
         "type": "comment",
         "z": "33acdda2eaf2a91b",
@@ -58,8 +89,8 @@
         "type": "function",
         "z": "33acdda2eaf2a91b",
         "name": "Build status + birth",
-        "func": "// ---------------------------------------------------------------------------\n// BuildingBAS gateway birth\n// In:   msg.payload = a data snapshot (nested JSON: site → system → device → points)\n// Out 1 → MQTT node \"connect\": status birth (online) + Last Will (offline), both retained\n// Out 2 → retained birth certificate on bas/<GATEWAY_ID>/birth, once connected\n// Set GATEWAY_ID in this tab's environment variables (Flow properties → Environment).\n// ---------------------------------------------------------------------------\n\nconst GATEWAY_ID = env.get(\"GATEWAY_ID\");\nif (!GATEWAY_ID) {\n    node.error(\"Set GATEWAY_ID in this flow's environment variables\");\n    return null;\n}\n\n// Top-level keys that wrap the tree but aren't part of a device's identity.\n// Shared with \"Build data message\" via the tab env, so device keys always match.\nconst SKIP_ROOT = (env.get(\"SKIP_ROOT\") || \"\").split(\",\").map((s) => s.trim()).filter(Boolean);\n\n// Point metadata. The first rule whose pattern matches the point key wins; anything a\n// rule leaves out falls back to DEFAULTS, and \"type\" to the sample value's type.\n// These are starting guesses: fill them in from the site's points list.\nconst RULES = [\n    { match: /Temp$/,                    type: \"float\", unit: \"°C\", acquisition: \"cov\", deadband: 0.2, min: -40, max: 150 },\n    { match: /SP$/,                      type: \"float\", unit: \"°C\", acquisition: \"cov\", writable: true },\n    { match: /Amps$/,                    type: \"float\", unit: \"A\",  acquisition: \"interval\", min: 0 },\n    { match: /(Output|Speed)$/,          type: \"float\", unit: \"%\",  acquisition: \"interval\", min: 0, max: 100 },\n    { match: /OutputFreq$/,              type: \"float\", unit: \"Hz\", acquisition: \"interval\", min: 0 },\n    { match: /(Command|Enable)$/,        type: \"int\",   acquisition: \"cov\", writable: true },\n    { match: /(Status|State|Running|Alarm|Mode)$/, type: \"int\", acquisition: \"cov\" },\n];\nconst DEFAULTS = { acquisition: \"interval\", writable: false };\n\n// Device types. The first rule whose pattern matches the device key wins. A type must be a\n// profile in the admin, written \"key@major.minor\". A device whose type is a known profile\n// (and that reports its required properties) is accepted instantly as a new device; one\n// with no type, or an unknown one, waits in the Birth certificates tab for review.\nconst TYPES = [\n    { match: /\\.DualTemp\\.Zone\\d+$/, type: \"DualTemp-1@1.0\" },\n    // { match: /\\.DHW\\.Boiler\\d+$/, type: \"dhw-boiler@1.0\" },\n];\n\n// --- parse input ------------------------------------------------------------\nlet snapshot = msg.payload;\nif (Buffer.isBuffer(snapshot)) snapshot = snapshot.toString(\"utf8\");\nif (typeof snapshot === \"string\") {\n    try { snapshot = JSON.parse(snapshot); }\n    catch (e) { node.error(\"Snapshot is not valid JSON\", msg); return null; }\n}\nif (!snapshot || typeof snapshot !== \"object\" || Array.isArray(snapshot)) {\n    node.error(\"Snapshot must be a JSON object\", msg);\n    return null;\n}\n\n// --- find devices: any object holding plain values is a device ----------------\nconst isObject = (v) => v !== null && typeof v === \"object\" && !Array.isArray(v);\nconst devices = [];\n\nfunction walk(obj, path) {\n    const points = Object.entries(obj).filter(([, v]) => !isObject(v));\n    if (points.length && path.length) devices.push({ path, points });\n    for (const [k, v] of Object.entries(obj)) {\n        if (isObject(v)) walk(v, [...path, k]);\n    }\n}\n\nfor (const [k, v] of Object.entries(snapshot)) {\n    if (k === \"timestamp\" || !isObject(v)) continue;\n    walk(v, SKIP_ROOT.includes(k) ? [] : [k]);\n}\n\nif (!devices.length) {\n    node.error(\"No devices found in the snapshot\", msg);\n    return null;\n}\n\n// --- describe each point ----------------------------------------------------------\nfunction inferType(value) {\n    if (typeof value === \"boolean\") return \"bool\";\n    if (typeof value === \"number\") return Number.isInteger(value) ? \"int\" : \"float\";\n    return \"string\";\n}\n\nfunction describe(key, value) {\n    const { match, ...meta } = RULES.find((r) => r.match.test(key)) || {};\n    return { key, type: meta.type || inferType(value), ...DEFAULTS, ...meta };\n}\n\nconst certificate = {\n    gateway: GATEWAY_ID,\n    timestamp: new Date().toISOString(),\n    devices: devices.map(({ path, points }) => {\n        const device_key = path.join(\".\");   // stable: e.g. Prudential301.DHW.Boiler1\n        const type = (TYPES.find((t) => t.match.test(device_key)) || {}).type;\n        return {\n            device_key,\n            name: path.slice(-2).join(\" \"),  // e.g. \"DHW Boiler1\"\n            ...(type && { type }),\n            properties: points.map(([key, value]) => describe(key, value)),\n        };\n    }),\n};\n\n// --- messages -----------------------------------------------------------------------\nconst statusTopic = `bas/${GATEWAY_ID}/status`;\nconst status = (s) => JSON.stringify({ status: s, gateway: GATEWAY_ID });\n\nconst connect = {\n    action: \"connect\",\n    broker: {\n        clientid: `gateway-${GATEWAY_ID}`,\n        birth: { topic: statusTopic, payload: status(\"online\"),  qos: 1, retain: true },\n        close: { topic: statusTopic, payload: status(\"offline\"), qos: 1, retain: true },\n        will:  { topic: statusTopic, payload: status(\"offline\"), qos: 1, retain: true },\n    },\n};\n\nconst birth = {\n    topic: `bas/${GATEWAY_ID}/birth`,\n    payload: JSON.stringify(certificate),\n    qos: 1,\n    retain: true,\n};\n\nnode.status({ fill: \"green\", shape: \"dot\", text: `${certificate.devices.length} devices` });\nreturn [connect, birth];\n",
-        "outputs": 2,
+        "func": "const GATEWAY_ID = env.get(\"GATEWAY_ID\");\nif (!GATEWAY_ID) {\n    node.error(\"Set GATEWAY_ID in this flow's environment variables\");\n    return null;\n}\n\nconst SKIP_ROOT = (env.get(\"SKIP_ROOT\") || \"\").split(\",\").map((s) => s.trim()).filter(Boolean);\n\nconst RULES = [\n    { match: /Temp$/,                    type: \"float\", unit: \"°C\", acquisition: \"cov\", deadband: 0.2, min: -40, max: 150 },\n    { match: /SP$/,                      type: \"float\", unit: \"°C\", acquisition: \"cov\", writable: true },\n    { match: /Amps$/,                    type: \"float\", unit: \"A\",  acquisition: \"interval\", min: 0 },\n    { match: /(Output|Speed)$/,          type: \"float\", unit: \"%\",  acquisition: \"interval\", min: 0, max: 100 },\n    { match: /OutputFreq$/,              type: \"float\", unit: \"Hz\", acquisition: \"interval\", min: 0 },\n    { match: /(Command|Enable)$/,        type: \"int\",   acquisition: \"cov\", writable: true },\n    { match: /(Status|State|Running|Alarm|Mode)$/, type: \"int\", acquisition: \"cov\" },\n];\nconst DEFAULTS = { acquisition: \"interval\", writable: false };\n\nconst TYPES = [\n    { match: /\\.DualTemp\\.Zone\\d+$/, type: \"DualTemp-1@1.0\" },\n];\n\nlet snapshot = msg.payload;\nif (Buffer.isBuffer(snapshot)) snapshot = snapshot.toString(\"utf8\");\nif (typeof snapshot === \"string\") {\n    try { snapshot = JSON.parse(snapshot); }\n    catch (e) { node.error(\"Snapshot is not valid JSON\", msg); return null; }\n}\nif (!snapshot || typeof snapshot !== \"object\" || Array.isArray(snapshot)) {\n    node.error(\"Snapshot must be a JSON object\", msg);\n    return null;\n}\n\nconst isObject = (v) => v !== null && typeof v === \"object\" && !Array.isArray(v);\nconst devices = [];\n\nfunction walk(obj, path) {\n    const points = Object.entries(obj).filter(([, v]) => !isObject(v));\n    if (points.length && path.length) devices.push({ path, points });\n    for (const [k, v] of Object.entries(obj)) {\n        if (isObject(v)) walk(v, [...path, k]);\n    }\n}\n\nfor (const [k, v] of Object.entries(snapshot)) {\n    if (k === \"timestamp\" || !isObject(v)) continue;\n    walk(v, SKIP_ROOT.includes(k) ? [] : [k]);\n}\n\nif (!devices.length) {\n    node.error(\"No devices found in the snapshot\", msg);\n    return null;\n}\n\nfunction inferType(value) {\n    if (typeof value === \"boolean\") return \"bool\";\n    if (typeof value === \"number\") return Number.isInteger(value) ? \"int\" : \"float\";\n    return \"string\";\n}\n\nfunction describe(key, value) {\n    const { match, ...meta } = RULES.find((r) => r.match.test(key)) || {};\n    return { key, type: meta.type || inferType(value), ...DEFAULTS, ...meta };\n}\n\nconst certificate = {\n    gateway: GATEWAY_ID,\n    timestamp: new Date().toISOString(),\n    devices: devices.map(({ path, points }) => {\n        const device_key = path.join(\".\");\n        const type = (TYPES.find((t) => t.match.test(device_key)) || {}).type;\n        return {\n            device_key,\n            name: path.slice(-2).join(\" \"),\n            ...(type && { type }),\n            properties: points.map(([key, value]) => describe(key, value)),\n        };\n    }),\n};\n\nconst statusTopic = `bas/${GATEWAY_ID}/status`;\nconst status = (s) => JSON.stringify({ status: s, gateway: GATEWAY_ID });\n\nconst connect = {\n    action: \"connect\",\n    broker: {\n        clientid: `gateway-${GATEWAY_ID}`,\n        birth: { topic: statusTopic, payload: status(\"online\"),  qos: 1, retain: true },\n        close: { topic: statusTopic, payload: status(\"offline\"), qos: 1, retain: true },\n        will:  { topic: statusTopic, payload: status(\"offline\"), qos: 1, retain: true },\n    },\n};\n\nconst birth = {\n    topic: `bas/${GATEWAY_ID}/birth`,\n    payload: JSON.stringify(certificate),\n    qos: 1,\n    retain: true,\n};\n\nnode.status({ fill: \"green\", shape: \"dot\", text: `${certificate.devices.length} devices` });\nconst subscribe = { action: \"subscribe\", topic: `bas/${GATEWAY_ID}/cmd`, qos: 1 };\nreturn [connect, birth, subscribe];\n",
+        "outputs": 3,
         "timeout": 0,
         "noerr": 0,
         "initialize": "",
@@ -73,6 +104,9 @@
             ],
             [
                 "a6275cede85d6de8"
+            ],
+            [
+                "c0mmand0de1a7001"
             ]
         ]
     },
@@ -93,8 +127,8 @@
         "drop": false,
         "allowrate": false,
         "outputs": 1,
-        "x": 640,
-        "y": 220,
+        "x": 650,
+        "y": 240,
         "wires": [
             [
                 "eb0fcd04ef22823e"
@@ -146,7 +180,7 @@
         "type": "function",
         "z": "33acdda2eaf2a91b",
         "name": "Build data message",
-        "func": "// ---------------------------------------------------------------------------\n// BuildingBAS gateway data\n// In:   msg.payload = a data snapshot (nested JSON: site → system → device → points),\n//       the same shape \"Build status + birth\" reads, so device keys match the birth.\n// Out → bas/<GATEWAY_ID>/data (not retained):\n//       { timestamp, devices: { \"<device_key>\": { \"<key>\": value, ... } } }\n// Test aid: msg.simulate = true stamps \"now\" and nudges decimal values by up to ±2%.\n// ---------------------------------------------------------------------------\n\nconst GATEWAY_ID = env.get(\"GATEWAY_ID\");\nif (!GATEWAY_ID) {\n    node.error(\"Set GATEWAY_ID in this flow's environment variables\");\n    return null;\n}\nconst SKIP_ROOT = (env.get(\"SKIP_ROOT\") || \"\").split(\",\").map((s) => s.trim()).filter(Boolean);\n\nlet snapshot = msg.payload;\nif (Buffer.isBuffer(snapshot)) snapshot = snapshot.toString(\"utf8\");\nif (typeof snapshot === \"string\") {\n    try { snapshot = JSON.parse(snapshot); }\n    catch (e) { node.error(\"Snapshot is not valid JSON\", msg); return null; }\n}\nif (!snapshot || typeof snapshot !== \"object\" || Array.isArray(snapshot)) {\n    node.error(\"Snapshot must be a JSON object\", msg);\n    return null;\n}\n\nconst isObject = (v) => v !== null && typeof v === \"object\" && !Array.isArray(v);\nconst nudge = (v) => (msg.simulate && typeof v === \"number\" && !Number.isInteger(v))\n    ? Math.round(v * (1 + (Math.random() - 0.5) * 0.04) * 10) / 10\n    : v;\n\n// Same walk as the birth: any object holding plain values is a device.\nconst devices = {};\nfunction walk(obj, path) {\n    const points = Object.entries(obj).filter(([, v]) => !isObject(v));\n    if (points.length && path.length) {\n        devices[path.join(\".\")] = Object.fromEntries(points.map(([k, v]) => [k, nudge(v)]));\n    }\n    for (const [k, v] of Object.entries(obj)) {\n        if (isObject(v)) walk(v, [...path, k]);\n    }\n}\nfor (const [k, v] of Object.entries(snapshot)) {\n    if (k === \"timestamp\" || !isObject(v)) continue;\n    walk(v, SKIP_ROOT.includes(k) ? [] : [k]);\n}\n\nconst count = Object.keys(devices).length;\nif (!count) {\n    node.error(\"No devices found in the snapshot\", msg);\n    return null;\n}\n\nconst timestamp = !msg.simulate && snapshot.timestamp ? snapshot.timestamp : new Date().toISOString();\nnode.status({ fill: \"green\", shape: \"dot\", text: `${count} devices @ ${new Date().toLocaleTimeString()}` });\n\nreturn {\n    topic: `bas/${GATEWAY_ID}/data`,\n    payload: JSON.stringify({ timestamp, devices }),\n    qos: 1,\n    retain: false,\n};\n",
+        "func": "const GATEWAY_ID = env.get(\"GATEWAY_ID\");\nif (!GATEWAY_ID) {\n    node.error(\"Set GATEWAY_ID in this flow's environment variables\");\n    return null;\n}\nconst SKIP_ROOT = (env.get(\"SKIP_ROOT\") || \"\").split(\",\").map((s) => s.trim()).filter(Boolean);\n\nlet snapshot = msg.payload;\nif (Buffer.isBuffer(snapshot)) snapshot = snapshot.toString(\"utf8\");\nif (typeof snapshot === \"string\") {\n    try { snapshot = JSON.parse(snapshot); }\n    catch (e) { node.error(\"Snapshot is not valid JSON\", msg); return null; }\n}\nif (!snapshot || typeof snapshot !== \"object\" || Array.isArray(snapshot)) {\n    node.error(\"Snapshot must be a JSON object\", msg);\n    return null;\n}\n\nconst isObject = (v) => v !== null && typeof v === \"object\" && !Array.isArray(v);\nconst nudge = (v) => (msg.simulate && typeof v === \"number\" && !Number.isInteger(v))\n    ? Math.round(v * (1 + (Math.random() - 0.5) * 0.04) * 10) / 10\n    : v;\n\nconst devices = {};\nfunction walk(obj, path) {\n    const points = Object.entries(obj).filter(([, v]) => !isObject(v));\n    if (points.length && path.length) {\n        devices[path.join(\".\")] = Object.fromEntries(points.map(([k, v]) => [k, nudge(v)]));\n    }\n    for (const [k, v] of Object.entries(obj)) {\n        if (isObject(v)) walk(v, [...path, k]);\n    }\n}\nfor (const [k, v] of Object.entries(snapshot)) {\n    if (k === \"timestamp\" || !isObject(v)) continue;\n    walk(v, SKIP_ROOT.includes(k) ? [] : [k]);\n}\n\nconst commanded = flow.get(\"commanded\") || {};\nfor (const [deviceKey, values] of Object.entries(commanded)) {\n    if (!devices[deviceKey]) continue;\n    for (const [key, value] of Object.entries(values)) {\n        if (key in devices[deviceKey]) devices[deviceKey][key] = value;\n    }\n}\nflow.set(\"points\", Object.fromEntries(Object.entries(devices).map(([k, v]) => [k, Object.keys(v)])));\n\nconst count = Object.keys(devices).length;\nif (!count) {\n    node.error(\"No devices found in the snapshot\", msg);\n    return null;\n}\n\nconst timestamp = !msg.simulate && snapshot.timestamp ? snapshot.timestamp : new Date().toISOString();\nnode.status({ fill: \"green\", shape: \"dot\", text: `${count} devices @ ${new Date().toLocaleTimeString()}` });\n\nreturn {\n    topic: `bas/${GATEWAY_ID}/data`,\n    payload: JSON.stringify({ timestamp, devices }),\n    qos: 1,\n    retain: false,\n};\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -175,39 +209,84 @@
         "correl": "",
         "expiry": "",
         "broker": "3859f37c76a3d5c6",
-        "x": 840,
-        "y": 260,
+        "x": 1020,
+        "y": 240,
         "wires": []
     },
     {
-        "id": "3859f37c76a3d5c6",
-        "type": "mqtt-broker",
-        "name": "",
-        "broker": "mqtt",
-        "port": "1883",
-        "clientid": "",
-        "autoConnect": false,
-        "usetls": false,
-        "protocolVersion": 4,
-        "keepalive": 60,
-        "cleansession": true,
-        "autoUnsubscribe": true,
-        "birthTopic": "bas",
-        "birthQos": "0",
-        "birthRetain": "false",
-        "birthPayload": "",
-        "birthMsg": {},
-        "closeTopic": "bas",
-        "closeQos": "0",
-        "closeRetain": "false",
-        "closePayload": "Disconnected",
-        "closeMsg": {},
-        "willTopic": "bas",
-        "willQos": "0",
-        "willRetain": "false",
-        "willPayload": "Disconnected Unexpectedly",
-        "willMsg": {},
-        "userProps": "",
-        "sessionExpiry": ""
+        "id": "c0mmand0de1a7001",
+        "type": "delay",
+        "z": "33acdda2eaf2a91b",
+        "name": "after connect",
+        "pauseType": "delay",
+        "timeout": "1",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 640,
+        "y": 440,
+        "wires": [
+            [
+                "c0mmand0de1a7002"
+            ]
+        ]
+    },
+    {
+        "id": "c0mmand0de1a7002",
+        "type": "mqtt in",
+        "z": "33acdda2eaf2a91b",
+        "name": "Commands",
+        "topic": "",
+        "qos": "1",
+        "datatype": "auto-detect",
+        "broker": "3859f37c76a3d5c6",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 1,
+        "x": 820,
+        "y": 440,
+        "wires": [
+            [
+                "c0mmand0de1a7003"
+            ]
+        ]
+    },
+    {
+        "id": "c0mmand0de1a7003",
+        "type": "function",
+        "z": "33acdda2eaf2a91b",
+        "name": "Apply command",
+        "func": "const GATEWAY_ID = env.get(\"GATEWAY_ID\");\nlet command = msg.payload;\nif (Buffer.isBuffer(command)) command = command.toString(\"utf8\");\nif (typeof command === \"string\") {\n    try { command = JSON.parse(command); }\n    catch (e) { node.error(\"Command is not valid JSON\", msg); return null; }\n}\nif (!command || typeof command !== \"object\") return null;\n\nconst { id, device_key: deviceKey, key, value } = command;\nconst points = flow.get(\"points\");\nlet reason = null;\nif (!deviceKey || !key || typeof value !== \"number\") reason = \"Command needs device_key, key and a numeric value\";\nelse if (points && !points[deviceKey]) reason = `Unknown device ${deviceKey}`;\nelse if (points && !points[deviceKey].includes(key)) reason = `${deviceKey} has no point ${key}`;\n\nconst ack = (status) => ({\n    topic: `bas/${GATEWAY_ID}/cmd/ack`,\n    payload: JSON.stringify({ id, status, ...(reason && { reason }), device_key: deviceKey, key, value }),\n    qos: 1,\n    retain: false,\n});\n\nif (reason) {\n    node.status({ fill: \"red\", shape: \"ring\", text: reason });\n    return [[ack(\"rejected\")]];\n}\n\nconst commanded = flow.get(\"commanded\") || {};\ncommanded[deviceKey] = { ...commanded[deviceKey], [key]: value };\nflow.set(\"commanded\", commanded);\n\nconst data = {\n    topic: `bas/${GATEWAY_ID}/data`,\n    payload: JSON.stringify({ timestamp: new Date().toISOString(), devices: { [deviceKey]: { [key]: value } } }),\n    qos: 1,\n    retain: false,\n};\n\nnode.status({ fill: \"green\", shape: \"dot\", text: `${key} = ${value} @ ${new Date().toLocaleTimeString()}` });\nreturn [[ack(\"applied\"), data]];\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1010,
+        "y": 440,
+        "wires": [
+            [
+                "eb0fcd04ef22823e"
+            ]
+        ]
+    },
+    {
+        "id": "c0mmand0de1a7004",
+        "type": "comment",
+        "z": "33acdda2eaf2a91b",
+        "name": "Commands: replace \"Apply command\" with the write to your field device",
+        "info": "The backend publishes { id, timestamp, by, device_key, key, value } on bas/<GATEWAY_ID>/cmd. The gateway answers on bas/<GATEWAY_ID>/cmd/ack with { id, status: \"applied\" | \"rejected\", reason }. This sample only remembers the value and reports it in the data that follows.",
+        "x": 870,
+        "y": 400,
+        "wires": []
     }
 ]

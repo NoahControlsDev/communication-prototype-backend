@@ -23,7 +23,6 @@ export async function getCertificate(req, res) {
   res.json(found(await certService.getCertificate(parseId(req.params.id)), 'Birth certificate'))
 }
 
-// Manual submission: a gateway birth message or a single device object. Useful for testing.
 export async function postCertificate(req, res) {
   const { topic, payload } = req.body ?? {}
   const certificates = await certService.ingest(typeof topic === 'string' ? topic : null, payload)
@@ -31,7 +30,6 @@ export async function postCertificate(req, res) {
   res.status(201).json({ certificates })
 }
 
-// profile: { mode: 'existing', profile_id } | { mode: 'new', key, major, minor, properties: [...] }
 function parseProfileDecision(p = {}) {
   if (p.mode === 'new') {
     if (!Array.isArray(p.properties)) throw new HttpError(400, 'profile.properties must be a list')
@@ -40,7 +38,7 @@ function parseProfileDecision(p = {}) {
   if (p.mode === 'existing') {
     return { mode: 'existing', profile_id: integer({ required: true })(p.profile_id, 'profile.profile_id') }
   }
-  return { mode: 'none' } // fine when the device already exists; the service checks
+  return { mode: 'none' }
 }
 
 function parseIds(ids) {
@@ -48,32 +46,26 @@ function parseIds(ids) {
   return [...new Set(ids.map(parseId))]
 }
 
-// Body: { device_key?, name?, site_tag?, gateway_key?, profile }
-// profile is ignored when a device with this key already exists.
 export async function postAccept(req, res) {
   const decision = { ...parse(req.body, ACCEPT), profile: parseProfileDecision(req.body?.profile) }
   const result = await certService.accept(parseId(req.params.id), decision)
   res.json({ ...result, promoted: await promoteUnapproved() })
 }
 
-// Body: { ids: [...], profile } → every certificate accepted onto the same profile, all or nothing.
 export async function postAcceptMany(req, res) {
   const ids = parseIds(req.body?.ids)
   const accepted = await certService.acceptMany(ids, parseProfileDecision(req.body?.profile))
   res.json({ accepted, promoted: await promoteUnapproved() })
 }
 
-// Body: { ids: [...] }
 export async function postDeclineMany(req, res) {
   res.json({ declined: await certService.declineMany(parseIds(req.body?.ids)) })
 }
 
-// Body: { ids: [...] }: declined → pending again
 export async function postReopenMany(req, res) {
   res.json({ reopened: await certService.reopenMany(parseIds(req.body?.ids)) })
 }
 
-// Body: { ids: [...] }: deletes the records; a resend shows up as a new certificate
 export async function postDeleteMany(req, res) {
   res.json({ deleted: await certService.deleteMany(parseIds(req.body?.ids)) })
 }

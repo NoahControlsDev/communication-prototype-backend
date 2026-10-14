@@ -1,14 +1,5 @@
 -- Up Migration
 
--- Cascading deletes ------------------------------------------------------------
--- Deleting a parent removes the rows that belong to it:
---   device           → its device_property rows → their readings
---   profile          → its profile_property rows
---   profile_property → the device_property rows generated from it → their readings
--- device.system_id / gateway_id / profile_id are left as-is (deletion blocked while
--- devices reference them), so removing a system, gateway or profile can't silently
--- wipe out devices.
-
 ALTER TABLE device_property
   DROP CONSTRAINT device_property_device_id_fkey,
   ADD CONSTRAINT device_property_device_id_fkey
@@ -27,33 +18,23 @@ ALTER TABLE profile_property
   ADD CONSTRAINT profile_property_profile_id_fkey
     FOREIGN KEY (profile_id) REFERENCES profile (id) ON DELETE CASCADE;
 
--- Single-row checks ----------------------------------------------------------------
-
 ALTER TABLE profile_property
   ADD CONSTRAINT profile_property_min_le_max
     CHECK (min IS NULL OR max IS NULL OR min <= max),
-  -- ISA-18.2, alarms only (§2.2)
   ADD CONSTRAINT profile_property_priority_alarms_only
     CHECK (priority IS NULL OR kind = 'alarm');
 
--- null while pending; a commissioned device has been placed in a system (§1.6)
 ALTER TABLE device
   ADD CONSTRAINT device_system_matches_status
     CHECK ((status = 'pending') = (system_id IS NULL));
 
 ALTER TABLE device_property
-  -- false = extension, and an extension has no profile_property (§2.1)
   ADD CONSTRAINT device_property_standard_has_profile_property
     CHECK (is_standard = (profile_property_id IS NOT NULL)),
   ADD CONSTRAINT device_property_min_override_le_max_override
     CHECK (min_override IS NULL OR max_override IS NULL OR min_override <= max_override),
-  -- may only drop to read-only
   ADD CONSTRAINT device_property_writable_override_read_only
     CHECK (writable_override IS NULL OR writable_override = false);
-
--- Narrow-only overrides (§1.1) -------------------------------------------------------
--- A device's min/max override may only tighten the range declared on its
--- profile_property. That compares two tables, so it needs triggers rather than CHECKs.
 
 CREATE FUNCTION device_property_check_overrides() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -62,7 +43,7 @@ DECLARE
   declared_max double precision;
 BEGIN
   IF NEW.profile_property_id IS NULL THEN
-    RETURN NEW; -- extension: no declared range to narrow
+    RETURN NEW;
   END IF;
 
   SELECT min, max INTO declared_min, declared_max
@@ -78,7 +59,6 @@ BEGIN
       NEW.max_override, declared_max USING ERRCODE = 'check_violation';
   END IF;
 
-  -- e.g. declared 0..100 with max_override -5 would leave an empty range
   IF COALESCE(NEW.min_override, declared_min) > COALESCE(NEW.max_override, declared_max) THEN
     RAISE EXCEPTION 'overrides leave an empty range (% > %)',
       COALESCE(NEW.min_override, declared_min), COALESCE(NEW.max_override, declared_max)
@@ -93,8 +73,6 @@ CREATE TRIGGER device_property_check_overrides
   BEFORE INSERT OR UPDATE OF profile_property_id, min_override, max_override ON device_property
   FOR EACH ROW EXECUTE FUNCTION device_property_check_overrides();
 
--- The other direction: tightening a profile's declared range must not leave
--- existing device overrides outside it.
 CREATE FUNCTION profile_property_check_overrides() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -116,8 +94,6 @@ $$;
 CREATE TRIGGER profile_property_check_overrides
   AFTER UPDATE OF min, max ON profile_property
   FOR EACH ROW EXECUTE FUNCTION profile_property_check_overrides();
-
--- Remove the prototype messages table --------------------------------------------
 
 DROP TABLE IF EXISTS messages;
 

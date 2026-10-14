@@ -1,4 +1,5 @@
 import * as dataService from '../services/dataService.js'
+import { evaluateGateway } from '../services/alertService.js'
 import { HttpError } from '../utils/HttpError.js'
 import { parse, parseId, text } from '../utils/validate.js'
 
@@ -12,7 +13,6 @@ export async function getUnapproved(req, res) {
   res.json(await dataService.unapprovedSummary())
 }
 
-// Body: any of { gateway_key, device_key, key, reason }; {} clears everything held.
 export async function postDeleteUnapproved(req, res) {
   const filters = parse(req.body, { gateway_key: text(), device_key: text(), key: text(), reason: text() })
   if (filters.reason && !REASONS.includes(filters.reason)) {
@@ -21,7 +21,6 @@ export async function postDeleteUnapproved(req, res) {
   res.json({ deleted: await dataService.deleteUnapproved(filters) })
 }
 
-// Body: { gateway_key, device_key, key? }: key omitted declines the whole device.
 export async function postDecline(req, res) {
   const rule = parse(req.body, { gateway_key: text({ required: true }), device_key: text({ required: true }), key: text() })
   res.status(201).json(await dataService.declinePoint(rule))
@@ -40,11 +39,12 @@ export async function postPromote(req, res) {
   res.json({ promoted: await dataService.promoteUnapproved() })
 }
 
-// Manual data message, same format as bas/<GATEWAY_ID>/data. Useful for testing.
 export async function postData(req, res) {
   const { gateway_key: gatewayKey, payload } = req.body ?? {}
   if (typeof gatewayKey !== 'string' || !gatewayKey.trim()) throw new HttpError(400, 'gateway_key is required')
-  res.status(201).json(await dataService.ingestData(gatewayKey.trim(), payload))
+  const result = await dataService.ingestData(gatewayKey.trim(), payload)
+  await evaluateGateway(gatewayKey.trim())
+  res.status(201).json(result)
 }
 
 function parseRange(value) {
@@ -55,7 +55,6 @@ function parseRange(value) {
   return range
 }
 
-// ?range=15m|1h|6h|24h|7d
 export async function getHistory(req, res) {
   const history = await dataService.propertyHistory(parseId(req.params.id), parseRange(req.query.range))
   if (!history) throw new HttpError(404, 'Device property not found')

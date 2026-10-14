@@ -7,8 +7,6 @@ export async function getEnums(req, res) {
   res.json(await profileService.listEnums())
 }
 
-// --- profiles ---
-
 export async function getProfiles(req, res) {
   res.json(await profileService.listProfiles())
 }
@@ -17,8 +15,6 @@ export async function postProfile(req, res) {
   res.status(201).json(await profileService.createProfile(parse(req.body, PROFILE)))
 }
 
-// auto_accept: devices declaring this type are accepted instantly (no birth-certificate review)
-// display: how the plant mimic draws this type (glyph, running rule, readouts); see migration
 const PROFILE_UPDATE = { ...PROFILE, auto_accept: bool({ required: true }), display: jsonObject() }
 
 export async function patchProfile(req, res) {
@@ -30,8 +26,6 @@ export async function deleteProfile(req, res) {
   found(await profileService.deleteProfile(parseId(req.params.id)), 'Profile')
   res.status(204).end()
 }
-
-// --- profile properties ---
 
 export async function getProperties(req, res) {
   const profileId = parseId(req.params.id)

@@ -4,7 +4,7 @@ import * as c from '../controllers/connectionController.js'
 const router = Router()
 
 router.get('/', c.getConnections)
-router.post('/', c.postConnection)        // { from_device_id, to_device_id }: supply → return
+router.post('/', c.postConnection)
 router.delete('/:id', c.deleteConnection)
 
 export default router

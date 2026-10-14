@@ -1,7 +1,3 @@
-// Generic INSERT / UPDATE from an object of { column: value }.
-// Column names must come from our own validation schemas (never from raw request keys);
-// values always go through $n placeholders.
-
 export async function insertRow(db, table, data) {
   const cols = Object.keys(data)
   const placeholders = cols.map((_, i) => `$${i + 1}`)
@@ -12,7 +8,6 @@ export async function insertRow(db, table, data) {
   return rows[0]
 }
 
-// Returns the updated row, or null if no row has that id.
 export async function updateRow(db, table, id, data) {
   const cols = Object.keys(data)
   const set = cols.map((c, i) => `${c} = $${i + 2}`)
@@ -23,7 +18,6 @@ export async function updateRow(db, table, id, data) {
   return rows[0] ?? null
 }
 
-// Returns true if a row was deleted.
 export async function deleteRow(db, table, id) {
   const { rowCount } = await db.query(`DELETE FROM ${table} WHERE id = $1`, [id])
   return rowCount > 0

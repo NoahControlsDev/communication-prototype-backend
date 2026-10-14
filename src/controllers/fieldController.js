@@ -7,7 +7,6 @@ export async function getFields(req, res) {
   res.json(await fieldService.listFields())
 }
 
-// Body: { gateway_key, device_key, key }
 export async function postApprove(req, res) {
   const field = parse(req.body, {
     gateway_key: text({ required: true }), device_key: text({ required: true }), key: text({ required: true }),

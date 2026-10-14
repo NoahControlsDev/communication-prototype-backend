@@ -1,21 +1,6 @@
 import pool from '../db/index.js'
 import config from '../config/index.js'
 
-// ---------------------------------------------------------------------------
-// Every field (gateway → device → key) the system knows about, in one list, whatever
-// its state. Merges four sources:
-//   device properties   → devices that exist (accepted, or extensions awaiting review)
-//   held data           → values that arrived for things not approved yet
-//   birth certificates  → fields a device declared (its metadata; pending or declined)
-//   declined rules      → fields or devices declined on the Data page
-//
-// state:  accepted | not_approved | declined
-// why:    accepted     → null
-//         not_approved → awaiting_review | unknown_property | unknown_device |
-//                        gateway_mismatch | pending_certificate
-//         declined     → declined_rule | declined_certificate
-// ---------------------------------------------------------------------------
-
 const META = ['kind', 'type', 'unit', 'lo', 'hi', 'acquisition', 'deadband', 'writable']
 
 export async function listFields() {
@@ -44,7 +29,6 @@ export async function listFields() {
        FROM unapproved_reading GROUP BY gateway_key, device_key, key, reason`,
       [config.unapprovedRetentionHours],
     ),
-    // latest certificate per device & gateway
     pool.query(
       `SELECT DISTINCT ON (device_key, gateway_key)
          id, device_key, gateway_key, status, declared_profile, name, fields, review_reason
@@ -76,7 +60,6 @@ export async function listFields() {
     }
   }
 
-  // Certificates first: their metadata is the fallback; profile metadata overrides it.
   for (const c of certs.rows) {
     for (const cf of c.fields) {
       const f = get(c.gateway_key, c.device_key, cf.key)
@@ -111,7 +94,7 @@ export async function listFields() {
     if (r.key === null) deviceRules.set(`${r.gateway_key}|${r.device_key}`, r.id)
     else {
       keyRules.set(idOf(r.gateway_key, r.device_key, r.key), r.id)
-      get(r.gateway_key, r.device_key, r.key) // a declined field shows even with no data
+      get(r.gateway_key, r.device_key, r.key)
     }
   }
 
@@ -130,7 +113,6 @@ export async function listFields() {
     }
   }
 
-  // Devices that exist here get their id/type on every field, even ones only seen in data.
   const deviceByKey = new Map(props.rows.map((p) => [`${p.gateway_key}|${p.device_key}`, p]))
   for (const f of fields.values()) {
     const d = deviceByKey.get(`${f.gateway_key}|${f.device_key}`)
@@ -141,10 +123,6 @@ export async function listFields() {
     a.gateway_key.localeCompare(b.gateway_key) || a.device_key.localeCompare(b.device_key) || a.key.localeCompare(b.key))
 }
 
-// Approves one field on an existing device: approves its extension, or adds the key as an
-// approved extension if the device doesn't have it yet. Held values then become readings
-// (the caller runs promoteUnapproved). Returns the device_property, or null when the device
-// doesn't exist on that gateway (it needs its birth certificate accepted first).
 export async function approveField({ gateway_key, device_key, key }) {
   const { rows: [device] } = await pool.query(
     `SELECT d.id FROM device d JOIN gateway g ON g.id = d.gateway_id
@@ -159,7 +137,6 @@ export async function approveField({ gateway_key, device_key, key }) {
      RETURNING *`,
     [device.id, key],
   )
-  // Approving means it's wanted: lift any decline on this field.
   await pool.query(
     'DELETE FROM declined_point WHERE gateway_key = $1 AND device_key = $2 AND key = $3',
     [gateway_key, device_key, key],

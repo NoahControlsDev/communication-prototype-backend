@@ -1,8 +1,5 @@
 import { HttpError } from './HttpError.js'
 
-// Each field parser takes (value, fieldName) and returns a clean value or throws a 400.
-// Blank values ('' / null / undefined) become null, unless the field is required.
-
 const blank = (v) => v === undefined || v === null || v === ''
 
 function wrap(required, check) {
@@ -56,8 +53,6 @@ export const stringList = () =>
     return v.length ? v : null
   })
 
-// Parses body against a schema { field: parser }.
-// partial = true (for PATCH): only fields present in the body are parsed and returned.
 export function parse(body, schema, { partial = false } = {}) {
   body = body ?? {}
   const out = {}

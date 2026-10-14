@@ -11,7 +11,6 @@ const DEVICE_CREATE = {
   profile_id: integer({ required: true }),
 }
 
-// profile_id isn't editable: changing a device's class would mean regenerating its properties.
 const DEVICE_UPDATE = {
   device_key: text({ required: true }),
   name: text({ required: true }),
@@ -19,7 +18,7 @@ const DEVICE_UPDATE = {
   gateway_id: integer({ required: true }),
   system_id: integer(),
   status: text({ required: true }),
-  map_x: integer(),   // position on the system map; both null = placed automatically
+  map_x: integer(),
   map_y: integer(),
 }
 
@@ -34,8 +33,6 @@ const DEVICE_PROPERTY_UPDATE = {
   writable_override: bool(),
 }
 
-// --- devices ---
-
 export async function getDevices(req, res) {
   res.json(await deviceService.listDevices())
 }
@@ -46,12 +43,10 @@ export async function getDevice(req, res) {
 
 export async function postDevice(req, res) {
   const device = await deviceService.createDevice(parse(req.body, DEVICE_CREATE))
-  await promoteUnapproved() // values it sent before it existed
+  await promoteUnapproved()
   res.status(201).json(await deviceService.getDevice(device.id))
 }
 
-// Commissioning is a PATCH of { status: 'commissioned', system_id }.
-// Setting status back to pending also clears the system, as the DB requires.
 export async function patchDevice(req, res) {
   const data = parse(req.body, DEVICE_UPDATE, { partial: true })
   if (data.status === 'pending' && !('system_id' in data)) data.system_id = null
@@ -65,7 +60,6 @@ export async function deleteDevice(req, res) {
   res.status(204).end()
 }
 
-// Adds any properties the profile has gained since the device was created.
 export async function postSync(req, res) {
   const id = parseId(req.params.id)
   found(await deviceService.getDevice(id), 'Device')
@@ -73,8 +67,6 @@ export async function postSync(req, res) {
   await promoteUnapproved()
   res.json({ added, device: await deviceService.getDevice(id) })
 }
-
-// --- device properties ---
 
 export async function postExtension(req, res) {
   const deviceId = parseId(req.params.id)
@@ -85,7 +77,7 @@ export async function postExtension(req, res) {
 export async function patchDeviceProperty(req, res) {
   const data = parse(req.body, DEVICE_PROPERTY_UPDATE, { partial: true })
   const property = found(await deviceService.updateDeviceProperty(parseId(req.params.id), data), 'Device property')
-  if (data.approved) await promoteUnapproved() // held values for this property become readings
+  if (data.approved) await promoteUnapproved()
   res.json(property)
 }
 
