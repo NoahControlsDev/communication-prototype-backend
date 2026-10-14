@@ -52,8 +52,10 @@ services:
     environment:
       MQTT_USERNAME: ${MQTT_GATEWAY_USERNAME:?set MQTT_GATEWAY_USERNAME in .env}
       MQTT_PASSWORD: ${MQTT_GATEWAY_PASSWORD:?set MQTT_GATEWAY_PASSWORD in .env}
+      NODERED_ADMIN_USER: ${NODERED_ADMIN_USER:-admin}
+      NODERED_ADMIN_PASSWORD_HASH: ${NODERED_ADMIN_PASSWORD_HASH:-}
     ports:
-      - "127.0.0.1:1880:1880"
+      - "${NODERED_HOST:-127.0.0.1}:${NODERED_PORT:-1880}:1880"
     volumes:
       - ./nodered:/data
     depends_on:
@@ -92,7 +94,7 @@ services:
     build: ../Frontend
     container_name: bas-frontend
     ports:
-      - "127.0.0.1:${FRONTEND_PORT:-5300}:80"
+      - "${FRONTEND_HOST:-127.0.0.1}:${FRONTEND_PORT:-5300}:80"
     depends_on:
       - backend
     develop:
@@ -109,7 +111,7 @@ services:
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in .env}
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
-      - "127.0.0.1:5050:80"
+      - "${PGADMIN_HOST:-127.0.0.1}:${PGADMIN_PORT:-5050}:80"
     volumes:
       - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
       - pgadmin-data:/var/lib/pgadmin
